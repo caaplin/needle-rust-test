@@ -1,0 +1,38 @@
+# Docker Compose setup for the Ubuntu notebook.
+#
+# The notebook service runs the Ubuntu container. The server service runs the
+# Rust server. The server mounts the Docker socket. The server runs commands in
+# the notebook container through the Docker daemon.
+#
+# Start everything with:
+#
+#   docker compose up --build
+#
+# Then open http://localhost:8080 and sign in with the credentials below.
+
+services:
+  notebook:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ubuntu-notebook
+    container_name: notebook-container
+    restart: unless-stopped
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    environment:
+      # Change these credentials before you expose the server.
+      NOTEBOOK_USERNAME: admin
+      NOTEBOOK_PASSWORD: notebook
+      NOTEBOOK_CONTAINER: notebook-container
+      DOCKER_HOST: unix:///var/run/docker.sock
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - notebook
+    restart: unless-stopped

@@ -1,0 +1,23 @@
+[package]
+name = "ubuntu-notebook-server"
+version = "0.1.0"
+edition = "2021"
+description = "Rust server that runs notebook commands in an Ubuntu Docker container and serves a notebook web page"
+
+[dependencies]
+# Web framework. Handles the HTTP requests.
+axum = "0.8"
+# Async runtime. Runs asynchronous tasks.
+tokio = { version = "1", features = ["full"] }
+# Docker client. Connects to the Docker daemon and runs commands in the container.
+bollard = "0.18"
+# JSON handling. Serializes and deserializes data.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Middleware. Adds basic authentication and CORS. The "fs" feature serves the
+# static frontend files from the public/ directory.
+tower-http = { version = "0.6", features = ["auth", "cors", "fs"] }
+# Stream trait extensions. Used to read the command output stream from Bollard.
+futures-util = "0.3"
+# HTTPS server. Used with rustls when TLS certificate files are configured.
+axum-server = { version = "0.8", features = ["tls-rustls"] }
