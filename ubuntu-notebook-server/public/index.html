@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ubuntu Notebook</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Ubuntu Notebook</h1>
+    <div class="toolbar">
+      <button id="add-command" type="button">+ Command cell</button>
+      <button id="add-comment" type="button">+ Comment cell</button>
+    </div>
+  </header>
+  <p id="status" class="status" role="status"></p>
+  <main id="cells" class="cells"></main>
+  <footer class="footer">
+    <p>Commands run in the Ubuntu Docker container. The server checks every command against an allow list.</p>
+  </footer>
+
+  <template id="cell-template">
+    <section class="cell">
+      <div class="cell-header">
+        <span class="cell-type"></span>
+        <span class="cell-id"></span>
+        <span class="cell-actions">
+          <button class="run-button" type="button">Run</button>
+          <button class="delete-button" type="button">Delete</button>
+        </span>
+      </div>
+      <textarea class="cell-content" rows="3" spellcheck="false"></textarea>
+      <pre class="cell-output" hidden></pre>
+    </section>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
