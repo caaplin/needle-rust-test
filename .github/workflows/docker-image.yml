@@ -29,6 +29,6 @@ jobs:
 
     - name: Build and push the notebook server image
       run: |
-        cd notebook-server
-        docker build . --file Dockerfile --tag ${{ secrets.DOCKERHUB_USERNAME }}/ubuntu-notebook-server:latest
+        cd ubuntu-notebook-server
+        docker build . --file Dockerfile.server --tag ${{ secrets.DOCKERHUB_USERNAME }}/ubuntu-notebook-server:latest
         docker push ${{ secrets.DOCKERHUB_USERNAME }}/ubuntu-notebook-server:latest
