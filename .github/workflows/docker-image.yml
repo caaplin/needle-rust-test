@@ -21,8 +21,14 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    - name: Build and push the Docker image
+    - name: Build and push the notebook sandbox image
       run: |
         cd ubuntu-notebook-server
         docker build . --file Dockerfile --tag ${{ secrets.DOCKERHUB_USERNAME }}/ubuntu-notebook:latest
         docker push ${{ secrets.DOCKERHUB_USERNAME }}/ubuntu-notebook:latest
+
+    - name: Build and push the notebook server image
+      run: |
+        cd notebook-server
+        docker build . --file Dockerfile --tag ${{ secrets.DOCKERHUB_USERNAME }}/ubuntu-notebook-server:latest
+        docker push ${{ secrets.DOCKERHUB_USERNAME }}/ubuntu-notebook-server:latest
