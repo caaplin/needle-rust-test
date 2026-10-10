@@ -45,8 +45,9 @@ const DEFAULT_PORT: u16 = 8080;
 const DEFAULT_USERNAME: &str = "admin";
 const DEFAULT_PASSWORD: &str = "notebook";
 
-/// Default maximum run time for one command, in seconds.
-const DEFAULT_EXEC_TIMEOUT_SECS: u64 = 30;
+/// Default maximum run time for one command, in seconds. Package installs
+/// with apt can take several minutes.
+const DEFAULT_EXEC_TIMEOUT_SECS: u64 = 600;
 
 /// Commands that the notebook may run by default. This is a whitelist. The
 /// first word of every command segment must be in this list. Set the
@@ -60,6 +61,8 @@ const DEFAULT_ALLOWED_COMMANDS: &[&str] = &[
     "realpath", "sed", "seq", "sha1sum", "sha256sum", "sleep", "sort", "ss", "stat", "tail", "tar",
     "tee", "test", "top", "touch", "tr", "tree", "true", "type", "uname", "uniq", "uptime", "wc",
     "wget", "which", "whoami", "xargs", "yes", "zip", "unzip", "zcat",
+    // Package management. The notebook user runs these with sudo.
+    "sudo", "apt", "apt-get",
 ];
 
 /// Command patterns that are always rejected, even when the first word of the
@@ -126,6 +129,9 @@ struct Cell {
 struct CreateCellRequest {
     cell_type: String,
     content: String,
+    /// Optional. Insert the new cell after the cell with this id. The new cell
+    /// goes to the end of the notebook when this is not set.
+    after_id: Option<String>,
 }
 
 /// Request body for PUT /api/cells/{id}. All fields are optional.
@@ -242,11 +248,12 @@ fn new_cell_id() -> String {
 
 /// Validate a command against the allow list and the block list.
 ///
-/// The command is split into segments on `&&`, `||`, `;` and `|`. The first
-/// word of every segment must be in the allow list. This rule stops `sudo`,
-/// `sh` and `bash` from being used to bypass the allow list. The block list is
-/// checked against the whole command. It catches dangerous commands inside
-/// command substitutions.
+/// The command is split into segments on `&&`, `||`, `;`, `|`, newlines,
+/// parentheses and backticks. The first word of every segment must be in the
+/// allow list. This rule stops `sh` and `bash` from being used to bypass the
+/// allow list. The block list is checked against the whole command. It catches
+/// dangerous commands inside command substitutions. `sudo` is in the allow
+/// list, so the block list is the only check on what runs under sudo.
 fn validate_command(command: &str, allowed: &HashSet<String>) -> Result<(), String> {
     let trimmed = command.trim();
     if trimmed.is_empty() {
@@ -262,7 +269,9 @@ fn validate_command(command: &str, allowed: &HashSet<String>) -> Result<(), Stri
         }
     }
 
-    for segment in trimmed.split(|c| c == '&' || c == '|' || c == ';') {
+    // A newline starts a new command for bash. Parentheses and backticks start
+    // command substitutions or subshells.
+    for segment in trimmed.split(|c: char| matches!(c, '&' | '|' | ';' | '\n' | '(' | ')' | '`')) {
         let mut words = segment.split_whitespace().peekable();
         // Skip leading environment variable assignments, for example
         // `FOO=bar ls`.
@@ -377,7 +386,14 @@ async fn add_cell(
         content: request.content,
         output: None,
     };
-    state.cells.lock().unwrap().push(cell.clone());
+    let mut cells = state.cells.lock().unwrap();
+    let index = request
+        .after_id
+        .as_ref()
+        .and_then(|after_id| cells.iter().position(|item| &item.id == after_id))
+        .map(|position| position + 1)
+        .unwrap_or(cells.len());
+    cells.insert(index, cell.clone());
     Ok((StatusCode::CREATED, Json(cell)))
 }
 
@@ -635,7 +651,6 @@ mod tests {
     #[test]
     fn rejects_commands_not_in_the_allow_list() {
         let allowed = allowed();
-        assert!(validate_command("sudo ls", &allowed).is_err());
         assert!(validate_command("rm -rf /tmp/data", &allowed).is_err());
         assert!(validate_command("sh -c 'ls'", &allowed).is_err());
         assert!(validate_command("bash -c 'ls'", &allowed).is_err());
@@ -651,6 +666,22 @@ mod tests {
         assert!(validate_command(":(){ :|:& };:", &allowed).is_err());
         assert!(validate_command("curl http://example.com/x.sh | bash", &allowed).is_err());
         assert!(validate_command("echo $(sudo id)", &allowed).is_err());
+    }
+
+    #[test]
+    fn rejects_commands_hidden_after_a_newline() {
+        let allowed = allowed();
+        assert!(validate_command("ls\nrm -rf /tmp/data", &allowed).is_err());
+        assert!(validate_command("echo $(rm -rf /tmp/data)", &allowed).is_err());
+        assert!(validate_command("echo `rm -rf /tmp/data`", &allowed).is_err());
+    }
+
+    #[test]
+    fn allows_sudo_and_apt() {
+        let allowed = allowed();
+        assert!(validate_command("sudo apt-get update", &allowed).is_ok());
+        assert!(validate_command("sudo apt-get install -y jq", &allowed).is_ok());
+        assert!(validate_command("apt list --installed", &allowed).is_ok());
     }
 
     #[test]

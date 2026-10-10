@@ -4,6 +4,11 @@
   box-sizing: border-box;
 }
 
+/* Keep the hidden attribute working on elements that have a display rule. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -51,7 +56,34 @@ button:disabled {
   cursor: wait;
 }
 
+button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* A rotating ring. Use it while a command runs. */
+.spinner {
+  display: inline-block;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(230, 230, 232, 0.25);
+  border-top-color: #9fd48a;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   padding: 8px 20px;
   min-height: 20px;
@@ -60,8 +92,25 @@ button:disabled {
   background: #24262c;
 }
 
-.status:empty {
-  display: none;
+.cell.running {
+  border-color: #6b7a4a;
+}
+
+.cell-running {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #c8e6b0;
+  background: #1a1b1f;
+  border-top: 1px solid #3d4048;
+}
+
+.run-elapsed {
+  margin-left: auto;
+  color: #9a9ea8;
+  font-variant-numeric: tabular-nums;
 }
 
 .cells {
@@ -160,4 +209,8 @@ button:disabled {
   font-size: 12px;
   color: #9a9ea8;
   text-align: center;
+}
+
+.footer p {
+  margin: 4px 0;
 }

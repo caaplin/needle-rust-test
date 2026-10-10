@@ -5,9 +5,22 @@
 # (/bin/bash).
 FROM ubuntu:24.04
 
-# Create a normal user. The container runs the shell as this user. Notebook
-# commands cannot run as root.
-RUN useradd --create-home --shell /bin/bash notebook
+# Install sudo. The notebook user uses sudo to run apt and other system
+# commands.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a normal user. The container runs the shell as this user. The user
+# has passwordless sudo. Keep DEBIAN_FRONTEND so that apt does not ask
+# questions during an install.
+RUN useradd --create-home --shell /bin/bash notebook \
+    && printf '%s\n' \
+        'Defaults env_keep += "DEBIAN_FRONTEND"' \
+        'notebook ALL=(ALL) NOPASSWD:ALL' \
+        > /etc/sudoers.d/notebook \
+    && chmod 0440 /etc/sudoers.d/notebook \
+    && visudo -cf /etc/sudoers.d/notebook
 USER notebook
 WORKDIR /home/notebook
 
