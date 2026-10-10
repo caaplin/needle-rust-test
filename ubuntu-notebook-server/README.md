@@ -75,14 +75,24 @@ The browser asks for a username and a password. The default username is `admin`.
 
 Run the server from this directory. The server serves the frontend files from the `public/` directory.
 
+## Use the Notebook
+
+- **Run a cell.** Click **Run** on a command cell. A spinner shows while the command runs. The output shows below the cell.
+- **Run and add a cell.** Press Shift+Enter in a command cell. The server runs the command. The notebook adds a new command cell below the cell and moves the cursor to it.
+- **Add a new line.** Press Enter. The cursor moves to a new line in the same cell. The command does not run.
+- **Run all.** Click **Run all**. The server runs every command cell in order, from top to bottom. Comment cells and empty command cells are skipped. A failed command does not stop the run. The status line shows the progress.
+- **Install packages.** Use apt with sudo. For example: `sudo apt-get update` and then `sudo apt-get install -y jq`.
+
 ## Test the Server
 
 1. Start the Rust server.
 2. Open a browser. Go to `http://localhost:8080`.
 3. Type the username and password.
-4. Add a command cell. Type a command (for example, `ls -la`). Click the run button.
+4. Add a command cell. Type a command (for example, `ls -la`). Click **Run**. Check that the command runs with one click.
 5. Check the output. The output must show the result of the command.
 6. Add a comment cell. Type some text. Check that the text shows in the cell.
+7. Type `sudo apt-get update` in a command cell. Press Shift+Enter. Check that the command runs and that a new cell opens below.
+8. Click **Run all**. Check that every command cell runs in order.
 
 ## API
 
@@ -92,7 +102,7 @@ The server has these endpoints:
 |---|---|---|
 | `/api/execute` | POST | Run a command in the container. |
 | `/api/cells` | GET | Get the list of cells. |
-| `/api/cells` | POST | Add a new cell. |
+| `/api/cells` | POST | Add a new cell. Insert it below another cell when `after_id` is set. |
 | `/api/cells/{id}` | PUT | Update a cell. |
 | `/api/cells/{id}` | DELETE | Delete a cell. |
 
@@ -132,7 +142,17 @@ Request body:
 }
 ```
 
-The `cell_type` value is `command` or `comment`. The response is the new cell. The status code is 201.
+The `cell_type` value is `command` or `comment`. The `after_id` field is optional. When you set it, the new cell goes directly below the cell with that id. Otherwise the new cell goes to the end of the notebook.
+
+```json
+{
+  "cell_type": "command",
+  "content": "",
+  "after_id": "cell-1737849600000000000-0"
+}
+```
+
+The response is the new cell. The status code is 201.
 
 ### GET /api/cells
 
@@ -178,7 +198,7 @@ The server reads these environment variables:
 | `NOTEBOOK_PASSWORD` | `notebook` | Basic auth password. |
 | `NOTEBOOK_CONTAINER` | `notebook-container` | Name of the Docker container. |
 | `NOTEBOOK_ALLOWED_COMMANDS` | built-in list | Comma-separated allow list of commands. |
-| `NOTEBOOK_EXEC_TIMEOUT_SECS` | `30` | Maximum run time for one command. |
+| `NOTEBOOK_EXEC_TIMEOUT_SECS` | `600` | Maximum run time for one command. Package installs with apt can take several minutes. |
 | `NOTEBOOK_TLS_CERT` | unset | Path to a TLS certificate file (PEM). |
 | `NOTEBOOK_TLS_KEY` | unset | Path to a TLS private key file (PEM). |
 | `DOCKER_HOST` | unset | Docker daemon address. Bollard reads this variable. |
@@ -199,10 +219,14 @@ The server applies these protections:
 
 1. **Basic authentication.** The server uses `tower-http` basic authentication. All endpoints and the frontend require a username and a password.
 2. **HTTPS.** Set `NOTEBOOK_TLS_CERT` and `NOTEBOOK_TLS_KEY` to serve HTTPS. Use axum-server with rustls. You can also put the server behind a reverse proxy.
-3. **Command allow list.** The server checks every command against a whitelist of allowed commands. The server does not allow dangerous commands. The first word of every command segment must be in the allow list. The server also rejects a block list of dangerous patterns (for example, `rm -rf /` and writes to block devices).
-4. **Non-root user.** The Dockerfile creates a normal user. The container runs the shell as that user. Notebook commands cannot run as root.
+3. **Command allow list.** The server checks every command against a whitelist of allowed commands. The server does not allow dangerous commands. The first word of every command segment must be in the allow list. A command segment ends at `&&`, `||`, `;`, `|`, a newline, a parenthesis or a backtick. The server also rejects a block list of dangerous patterns (for example, `rm -rf /` and writes to block devices).
+4. **Non-root user with sudo.** The Dockerfile creates a normal user named `notebook`. The container runs the shell as that user. The user has passwordless sudo, so that apt and other system commands work. Notebook commands do not run as root by default. Run a command with `sudo` to run it as root.
+
+The sudo access weakens the command check. The allow list includes `sudo`. Any command can run as root when it starts with `sudo`. The block list is the only check on those commands. Treat the notebook container as a machine that users fully control. Do not give the notebook container access to secrets or host data.
 
 The command check is not a sandbox. Always run the notebook container as a disposable container. Do not mount host directories into the notebook container.
+
+To remove sudo access, delete the `notebook` sudoers line from the Dockerfile and remove `sudo`, `apt` and `apt-get` from the allow list.
 
 ## Cells
 
@@ -268,7 +292,8 @@ ubuntu-notebook-server/
 ## Important Notes
 
 - Bollard needs access to the Docker socket. Mount `/var/run/docker.sock` into the Rust server container. Or run the Rust server on the host machine.
-- The `command` variable must be sanitized. Do not pass user input directly to the shell. The server checks every command against the allow list. The server runs the command as `bash -c <command>` in the container as a non-root user.
+- The `command` variable must be sanitized. Do not pass user input directly to the shell. The server checks every command against the allow list. The server runs the command as `bash -c <command>` in the container as the `notebook` user.
+- Packages that apt installs stay in the container. They are lost when the container is removed and recreated. Add packages to the Dockerfile to keep them in the image.
 - Use `tokio::process::Command` as an alternative to Bollard. This method runs commands directly on the host. But this method does not use the Docker container.
 - Bollard supports both Docker and Podman. Use the `DOCKER_HOST` environment variable to set the connection location.
 - For streaming output, use WebSockets. Axum supports WebSockets. This server returns the full output when the command finishes.
